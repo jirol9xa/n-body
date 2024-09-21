@@ -9,14 +9,14 @@ Single thread programm
 
 |O0|O3|
 |--|--|
-|88.6|17.6s|
+|88.6s|17.6s|
 
 ## Parallel for changing bodies positions and cleaning force's array in parallel
 That operations don't need any synchronization, so it's so easy to parallelize
 
 |O0|O3|
 |--|--|
-|89.0|17.8s|
+|89.0s|17.8s|
 
 Got same result -> No need to optimize that piece of code in ver3
 
@@ -31,7 +31,7 @@ Got same result -> No need to optimize that piece of code in ver3
 
 |O0|O3|
 |--|--|
-|140|infinit time =)|
+|140s|infinit time =)|
 
 ## Parallel with atomics
 
@@ -44,5 +44,5 @@ Got same result -> No need to optimize that piece of code in ver3
 
 |O0|O3|
 |--|--|
-|24|5.6|
+|24s|5.6s|
 
