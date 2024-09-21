@@ -1,12 +1,14 @@
+#include <algorithm>
 #include <array>
 #include <initializer_list>
 #include <type_traits>
+#include <iostream>
+#include <chrono>
 
-constexpr int BODIES_AMNT = 100;
+constexpr int BODIES_AMNT = 100000;
 constexpr float MAX_FORCE = 1.0;
 constexpr float G = 6.67;
 constexpr float DT = 0.01;
-
 
 template <typename T>
 struct Triple {
@@ -68,7 +70,7 @@ struct Force : Triple<Force> {
 using Bodies = std::array<Body, BODIES_AMNT>;
 using Forces = std::array<Force, BODIES_AMNT>;
 
-void Init(Bodies& bodies, Forces& forces)
+void Init(Bodies& bodies)
 {
     for (int i = 0; i < BODIES_AMNT; ++i)
     {
@@ -104,17 +106,46 @@ void CalculateForces(const Bodies& bodies, Forces& forces) {
 
 void ChangeBodiesPositions(Bodies& bodies, const Forces& forces) {
     for (int i = 0; i < BODIES_AMNT; ++i) {
-        float a = forces[i]
+        // auto tid = omp_get_thread_num();
+        // std::cout << tid << std::endl;
+
+        auto& body = bodies[i];
+        const auto& force = forces[i];
+        Acceleration a  {force.X / body.Mass, force.Y / body.Mass, force.Z / body.Mass};
+
+        body.Coord.X += body.Vecolcity.X * DT + a.X * DT * DT / 2;
+        body.Coord.Y += body.Vecolcity.Y * DT + a.Y * DT * DT / 2;
+        body.Coord.Z += body.Vecolcity.Z * DT + a.Z * DT * DT / 2;
+
+        body.Vecolcity.X += a.X * DT;
+        body.Vecolcity.Y += a.Y * DT;
+        body.Vecolcity.Z += a.Z * DT;
     }
 }
 
-int main() {
-    Bodies bodies;
-    Forces forces;
-    for (int i = 0; i < BODIES_AMNT; ++i) {
+void ClearForces(Forces& forces) {
+    std::fill(forces.begin(), forces.end(), Force{0.f, 0.f, 0.f});
+}
 
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        std::cout << "<ERR> Enter iter amnt" << std::endl;
+        return 0;
     }
 
+    Bodies bodies;
+    Forces forces;
+    Init(bodies);
 
+    int stepsAmnt = std::stoi(argv[1]);
+    const auto start = std::chrono::steady_clock().now();
+    for (int k = 0; k < stepsAmnt; ++k) {
+        CalculateForces(bodies, forces);
+        ChangeBodiesPositions(bodies, forces);
+        ClearForces(forces);
+    }
+
+    const std::chrono::duration<double> duration{std::chrono::steady_clock().now() - start};
+    std::cout << "Finished in " << duration.count() << std::endl;
     return 0;
 }
