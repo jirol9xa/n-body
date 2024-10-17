@@ -159,7 +159,7 @@ void CalculateForces(const Bodies& bodies, Forces<true>& forces) {
         for (int i = 0; i < BODIES_AMNT; ++i) {
             // forces[i] is the same on every inner loop iter, so change it
             // only after whole loop ends
-            Force<false> forceChange;
+            Force<false> forceiChange;
             for (int j = i + 1; j < BODIES_AMNT; ++j) {
                 const auto& first = bodies[i];
                 const auto& second = bodies[j];
@@ -176,11 +176,11 @@ void CalculateForces(const Bodies& bodies, Forces<true>& forces) {
                 Force<false> additionalForce { force * dx * r_1, force * dy * r_1, force * dz * r_1};
 
                 // non atomic operation
-                forceChange += additionalForce;
+                forceiChange += additionalForce;
                 // atomic operation
                 forces[j] -= additionalForce;
             }
-            forces[i] += forceChange;
+            forces[i] += forceiChange;
         }
     }
 }
