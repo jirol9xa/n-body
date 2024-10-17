@@ -67,3 +67,52 @@ Got same result -> No need to optimize that piece of code in ver3
 |O0|O3|
 |--|--|
 |17.85s|s|
+
+## Parallel version with accumulating all force differences in thread local vars, making only 2*N atomic operations (ver7)
+
+    Forces<false> forcejChange;
+        #pragma omp for schedule(dynamic)
+        for (int i = 0; i < BODIES_AMNT; ++i) {
+            // forces[i] is the same on every inner loop iter, so change it
+            // only after whole loop ends
+            Force<false> forceiChange;
+            for (int j = i + 1; j < BODIES_AMNT; ++j) {
+                const auto& first = bodies[i];
+                const auto& second = bodies[j];
+
+                float dx = second.Coord.X - first.Coord.X;
+                float dy = second.Coord.Y - first.Coord.Y;
+                float dz = second.Coord.Z - first.Coord.Z;
+                float r_2 = 1 / (dx * dx + dy * dy + dz * dz);
+                float r_1 = sqrt(r_2);
+
+                float force = G * first.Mass * second.Mass * r_2;
+                force = std::min(force, MAX_FORCE);
+
+                Force<false> additionalForce { force * dx * r_1, force * dy * r_1, force * dz * r_1};
+
+                // non atomic operation
+                forceiChange += additionalForce;
+                // non atomic operation
+                forcejChange[j] -= additionalForce;
+            }
+            // atomic operation
+            forces[i] += forceiChange;
+        }
+
+        for (int j = 0; j < BODIES_AMNT; ++j) {
+            // atomic operation
+            forces[j] += forcejChange[j];
+        }
+
+|O0|O3|
+|--|--|
+|12.75s|s|
+
+# Interesting fact
+
+## Parallel version with accumulating all force differences in one array, making only 1*N atomic operations (ver8)
+|O0|O3|
+|--|--|
+|13.2s|s|
+***Slowly than 2N alotic operations????*** Cache locality for forcesChange???

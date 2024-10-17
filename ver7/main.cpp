@@ -155,6 +155,7 @@ void Init(Bodies& bodies)
 void CalculateForces(const Bodies& bodies, Forces<true>& forces) {
     #pragma omp parallel
     {
+        Forces<false> forcejChange;
         #pragma omp for schedule(dynamic)
         for (int i = 0; i < BODIES_AMNT; ++i) {
             // forces[i] is the same on every inner loop iter, so change it
@@ -177,11 +178,16 @@ void CalculateForces(const Bodies& bodies, Forces<true>& forces) {
 
                 // non atomic operation
                 forceiChange += additionalForce;
-                // atomic operation
-                forces[j] -= additionalForce;
+                // non atomic operation
+                forcejChange[j] -= additionalForce;
             }
             // atomic operation
             forces[i] += forceiChange;
+        }
+
+        for (int j = 0; j < BODIES_AMNT; ++j) {
+            // atomic operation
+            forces[j] += forcejChange[j];
         }
     }
 }
