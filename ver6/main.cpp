@@ -77,34 +77,69 @@ struct Body {
     float Mass = 0;
 };
 
-struct Force : Triple<Force, float> {
-    using Triple::Init;
+template <bool IsAtomic = true>
+struct Force : Triple<Force<IsAtomic>, float> {
+    using Triple<Force<IsAtomic>, float>::Init;
 
     Force& operator+=(const Force& other) {
-        #pragma omp atomic
-        X += other.X;
-        #pragma omp atomic
-        Y += other.Y;
-        #pragma omp atomic
-        Z += other.Z;
+        if constexpr (IsAtomic) {
+            #pragma omp atomic
+            Triple<Force<IsAtomic>, float>::X += other.X;
+            #pragma omp atomic
+            Triple<Force<IsAtomic>, float>::Y += other.Y;
+            #pragma omp atomic
+            Triple<Force<IsAtomic>, float>::Z += other.Z;
+        } else {
+            Triple<Force<IsAtomic>, float>::X += other.X;
+            Triple<Force<IsAtomic>, float>::Y += other.Y;
+            Triple<Force<IsAtomic>, float>::Z += other.Z;
+        }
 
         return *this;
     }
 
     Force& operator-=(const Force& other) {
+        if constexpr (IsAtomic) {
+            #pragma omp atomic
+            Triple<Force<IsAtomic>, float>::X -= other.X;
+            #pragma omp atomic
+            Triple<Force<IsAtomic>, float>::Y -= other.Y;
+            #pragma omp atomic
+            Triple<Force<IsAtomic>, float>::Z -= other.Z;
+        } else {
+            Triple<Force<IsAtomic>, float>::X -= other.X;
+            Triple<Force<IsAtomic>, float>::Y -= other.Y;
+            Triple<Force<IsAtomic>, float>::Z -= other.Z;
+        }
+
+        return *this;
+    }
+
+    Force& operator+=(const Force<false>& other) requires(IsAtomic == true) {
         #pragma omp atomic
-        X -= other.X;
+        Triple<Force<IsAtomic>, float>::X += other.X;
         #pragma omp atomic
-        Y -= other.Y;
+        Triple<Force<IsAtomic>, float>::Y += other.Y;
         #pragma omp atomic
-        Z -= other.Z;
+        Triple<Force<IsAtomic>, float>::Z += other.Z;
+    
+        return *this;
+    }
+    Force& operator-=(const Force<false>& other) requires(IsAtomic == true) {
+        #pragma omp atomic
+        Triple<Force<IsAtomic>, float>::X -= other.X;
+        #pragma omp atomic
+        Triple<Force<IsAtomic>, float>::Y -= other.Y;
+        #pragma omp atomic
+        Triple<Force<IsAtomic>, float>::Z -= other.Z;
 
         return *this;
     }
 };
 
 using Bodies = std::array<Body, BODIES_AMNT>;
-using Forces = std::array<Force, BODIES_AMNT>;
+template <bool IsAtomic>
+using Forces = std::array<Force<IsAtomic>, BODIES_AMNT>;
 
 void Init(Bodies& bodies)
 {
@@ -117,11 +152,14 @@ void Init(Bodies& bodies)
     }
 }
 
-void CalculateForces(const Bodies& bodies, Forces& forces) {
+void CalculateForces(const Bodies& bodies, Forces<true>& forces) {
     #pragma omp parallel
     {
         #pragma omp for schedule(dynamic)
         for (int i = 0; i < BODIES_AMNT; ++i) {
+            // forces[i] is the same on every inner loop iter, so change it
+            // only after whole loop ends
+            Force<false> forceChange;
             for (int j = i + 1; j < BODIES_AMNT; ++j) {
                 const auto& first = bodies[i];
                 const auto& second = bodies[j];
@@ -135,16 +173,19 @@ void CalculateForces(const Bodies& bodies, Forces& forces) {
                 float force = G * first.Mass * second.Mass * r_2;
                 force = std::min(force, MAX_FORCE);
 
-                Force additionalForce { force * dx * r_1, force * dy * r_1, force * dz * r_1};
+                Force<false> additionalForce { force * dx * r_1, force * dy * r_1, force * dz * r_1};
 
-                forces[i] += additionalForce;
+                // non atomic operation
+                forceChange += additionalForce;
+                // atomic operation
                 forces[j] -= additionalForce;
             }
+            forces[i] += forceChange;
         }
     }
 }
 
-void ChangeBodiesPositions(Bodies& bodies, const Forces& forces) {
+void ChangeBodiesPositions(Bodies& bodies, const Forces<true>& forces) {
     for (int i = 0; i < BODIES_AMNT; ++i) {
         // auto tid = omp_get_thread_num();
         // std::cout << tid << std::endl;
@@ -163,8 +204,8 @@ void ChangeBodiesPositions(Bodies& bodies, const Forces& forces) {
     }
 }
 
-void ClearForces(Forces& forces) {
-    std::fill(forces.begin(), forces.end(), Force{0.f, 0.f, 0.f});
+void ClearForces(Forces<true>& forces) {
+    std::fill(forces.begin(), forces.end(), Force<>{0.f, 0.f, 0.f});
 }
 
 int main(int argc, char* argv[]) {
@@ -174,7 +215,7 @@ int main(int argc, char* argv[]) {
     }
 
     Bodies bodies;
-    Forces forces;
+    Forces<true> forces;
     Init(bodies);
 
     int stepsAmnt = std::stoi(argv[1]);

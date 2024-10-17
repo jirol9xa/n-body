@@ -77,7 +77,7 @@ struct Body {
     float Mass = 0;
 };
 
-struct Force : Triple<Force, float> {
+struct alignas(64) Force : Triple<Force, float> {
     using Triple::Init;
 
     Force& operator+=(const Force& other) {
